@@ -22,7 +22,7 @@ import plotly.graph_objects as go
 import requests
 import math
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # ── CONFIGURATION ─────────────────────────────────────────────────────────────
 
@@ -181,13 +181,20 @@ def load_workload_logs() -> pd.DataFrame:
     data = fetch_all_data()
     if data.get("error"):
         st.error(f"โหลดข้อมูลภาระงานไม่สำเร็จ: {data['error']}")
-        return pd.DataFrame(columns=["Timestamp","Date","Name","Task_No","Task_Name","Details","Minutes"])
+        return pd.DataFrame(columns=["Timestamp","Date","Name","Task_No","Task_Name","Details","Minutes","Start_Time","End_Time"])
         
     logs = data.get("logs", [])
     if not logs:
-        return pd.DataFrame(columns=["Timestamp","Date","Name","Task_No","Task_Name","Details","Minutes"])
+        return pd.DataFrame(columns=["Timestamp","Date","Name","Task_No","Task_Name","Details","Minutes","Start_Time","End_Time"])
         
     df = pd.DataFrame(logs)
+    
+    # กรณีข้อมูลเก่าไม่มีคอลัมน์ Start_Time และ End_Time
+    if "Start_Time" not in df.columns:
+        df["Start_Time"] = "-"
+    if "End_Time" not in df.columns:
+        df["End_Time"] = "-"
+        
     df["Minutes"] = pd.to_numeric(df["Minutes"], errors="coerce").fillna(0)
     df["Task_No"] = pd.to_numeric(df["Task_No"], errors="coerce").fillna(0).astype(int)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -204,12 +211,12 @@ def load_staff_list() -> list:
 # ── DATA WRITING ──────────────────────────────────────────────────────────────
 
 def append_workload_log(date_val: date, name: str, task_no: int, task_name: str,
-                        details: str, minutes: int) -> bool:
+                        details: str, minutes: int, start_time: str, end_time: str) -> bool:
     """Append one row to Workload_Logs. Returns True on success."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     payload = {
         "action": "append_log",
-        "data": [timestamp, str(date_val), name, task_no, task_name, details, minutes]
+        "data": [timestamp, str(date_val), name, task_no, task_name, details, minutes, start_time, end_time]
     }
     if post_to_gas(payload):
         invalidate_cache()
@@ -299,7 +306,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.markdown("---")
-    st.caption("ระบบบริหารภาระงานนักฟิสิกส์การแพทย์\nv1.1 — Google Apps Script Backend")
+    st.caption("ระบบบริหารภาระงานนักฟิสิกส์การแพทย์\nv1.2 — Add Time Logging")
 
 # ── TAB 1: DATA ENTRY ─────────────────────────────────────────────────────────
 
@@ -319,12 +326,19 @@ if tab_choice == "📝 บันทึกภาระงาน":
                 options=staff_list if staff_list else ["— กรุณาเพิ่มชื่อก่อน —"],
                 key="entry_name",
             )
+            entry_details = st.text_input("📝 รายละเอียดเพิ่มเติม (ถ้ามี)", key="entry_details")
+            
         with col2:
             entry_task_label = st.selectbox("📋 งาน", options=TASK_LABELS, key="entry_task")
-            entry_minutes = st.number_input(
-                "⏱️ เวลาที่ใช้ (นาที)", min_value=1, max_value=1440, value=30, step=5, key="entry_mins"
-            )
-        entry_details = st.text_input("📝 รายละเอียดเพิ่มเติม (ถ้ามี)", key="entry_details")
+            
+            # เปลี่ยนจากกรอกนาที เป็นการเลือกเวลาเริ่มและเวลาสิ้นสุด
+            time_col1, time_col2 = st.columns(2)
+            with time_col1:
+                start_time = st.time_input("เวลาเริ่ม", value=datetime.strptime("08:30", "%H:%M").time())
+            with time_col2:
+                end_time = st.time_input("เวลาสิ้นสุด", value=datetime.strptime("09:00", "%H:%M").time())
+                
+            st.caption("ระบบจะคำนวณจำนวนนาทีให้โดยอัตโนมัติเมื่อกดบันทึกข้อมูล")
 
         submitted = st.form_submit_button("💾 บันทึกข้อมูล", use_container_width=True, type="primary")
 
@@ -334,14 +348,27 @@ if tab_choice == "📝 บันทึกภาระงาน":
         else:
             task_no = TASK_NO_FROM_LABEL[entry_task_label]
             task_name = TASKS[task_no]
-            ok = append_workload_log(
-                entry_date, entry_name, task_no, task_name, entry_details, int(entry_minutes)
-            )
-            if ok:
-                st.markdown(
-                    '<div class="success-banner">✅ บันทึกข้อมูลสำเร็จแล้ว!</div>',
-                    unsafe_allow_html=True,
+            
+            # คำนวณเวลาอัตโนมัติ (รองรับกรณีเวลาสิ้นสุดข้ามไปอีกวัน)
+            dt_start = datetime.combine(entry_date, start_time)
+            dt_end = datetime.combine(entry_date, end_time)
+            if dt_end < dt_start:
+                dt_end += timedelta(days=1)
+                
+            calc_minutes = int((dt_end - dt_start).total_seconds() / 60)
+            
+            if calc_minutes <= 0:
+                st.error("⚠️ เวลาที่ระบุไม่ถูกต้อง กรุณาตรวจสอบเวลาเริ่มและสิ้นสุด")
+            else:
+                ok = append_workload_log(
+                    entry_date, entry_name, task_no, task_name, entry_details, 
+                    calc_minutes, start_time.strftime("%H:%M"), end_time.strftime("%H:%M")
                 )
+                if ok:
+                    st.markdown(
+                        f'<div class="success-banner">✅ บันทึกข้อมูลสำเร็จ! ใช้เวลาทำงานไป <b>{calc_minutes} นาที</b></div>',
+                        unsafe_allow_html=True,
+                    )
 
 # ── TAB 2: HISTORY & CALENDAR ─────────────────────────────────────────────────
 
@@ -380,8 +407,10 @@ elif tab_choice == "📅 ประวัติและปฏิทิน":
     # ── Table display
     display_df = filtered.copy()
     display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
-    display_df = display_df[["Timestamp","Date","Name","Task_No","Task_Name","Details","Minutes"]]
-    display_df.columns = ["บันทึกเมื่อ","วันที่","ชื่อ","ลำดับงาน","ชื่องาน","รายละเอียด","นาที"]
+    
+    # จัดเรียงคอลัมน์ใหม่ให้แสดงเวลาด้วย
+    display_df = display_df[["Timestamp", "Date", "Start_Time", "End_Time", "Name", "Task_No", "Task_Name", "Details", "Minutes"]]
+    display_df.columns = ["บันทึกเมื่อ", "วันที่", "เวลาเริ่ม", "เวลาสิ้นสุด", "ชื่อ", "ลำดับงาน", "ชื่องาน", "รายละเอียด", "นาทีรวม"]
 
     st.dataframe(display_df, use_container_width=True, height=320)
 
@@ -393,8 +422,9 @@ elif tab_choice == "📅 ประวัติและปฏิทิน":
         events = []
         for _, row in filtered.iterrows():
             if pd.notnull(row["Date"]):
+                time_str = f" [{row['Start_Time']}-{row['End_Time']}]" if row.get('Start_Time') and row['Start_Time'] != "-" else ""
                 events.append({
-                    "title": f"{row['Name']}: {str(row['Task_Name'])[:30]}… ({row['Minutes']}m)",
+                    "title": f"{row['Name']}{time_str}: {str(row['Task_Name'])[:30]}… ({row['Minutes']}m)",
                     "start": row["Date"].strftime("%Y-%m-%d"),
                     "end":   row["Date"].strftime("%Y-%m-%d"),
                     "color": "#0284c7",
