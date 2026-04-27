@@ -5,12 +5,11 @@ import plotly.graph_objects as go
 import requests
 import math
 import io
-import json
 from datetime import datetime, date, timedelta
 
 # ── CONFIGURATION ─────────────────────────────────────────────────────────────
 
-# ⚠️ ตรวจสอบ SCRIPT_URL ให้ถูกต้อง
+# ⚠️ วาง SCRIPT_URL ให้ถูกต้อง
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzKjgLJ7yRHLkDpCZejbmWEDBQcvyd-YZmeS7WMMYBVkKkkyhckElmRVoE1NpHNenX7NA/exec"
 
 MONTHLY_FTE_MINUTES = 8_750
@@ -47,7 +46,6 @@ THAI_MONTHS = {
 
 st.set_page_config(page_title="Medical Physicist Workload", page_icon="⚛️", layout="wide")
 
-# CSS Styling (Match image_100bb0.png)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
@@ -73,11 +71,20 @@ st.markdown("""
 # ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 
 def format_gas_time(time_val):
-    """Clean GAS 1899 date bug and return HH:mm"""
-    if not time_val or time_val == "-": return "-"
+    """ฟังก์ชันแก้ปัญหาเวลา 01:47 กลับมาเป็น 08:30 (บังคับ Timezone ไทย)"""
+    if pd.isna(time_val) or not time_val or time_val == "-": 
+        return "-"
     time_str = str(time_val)
     if "T" in time_str:
-        return time_str.split("T")[1][:5]
+        try:
+            dt = pd.to_datetime(time_str)
+            if dt.tz is None:
+                dt = dt.tz_localize('UTC')
+            # แปลงเป็นเวลาไทย
+            dt = dt.tz_convert('Asia/Bangkok')
+            return dt.strftime('%H:%M')
+        except:
+            pass
     return time_str
 
 @st.cache_data(ttl=60)
@@ -117,7 +124,7 @@ def generate_word_report(df_report, report_type, period_text):
 
     for _, row in df_report.sort_values(by="Date").iterrows():
         cells = table.add_row().cells
-        cells[0].text = pd.to_datetime(row['Date']).strftime('%d/%m/%Y')
+        cells[0].text = row['Date'].strftime('%d/%m/%Y')
         s_time = format_gas_time(row.get('Start_Time', '-'))
         e_time = format_gas_time(row.get('End_Time', '-'))
         cells[1].text = f"{s_time}-{e_time}"
@@ -136,7 +143,7 @@ with st.sidebar:
     st.markdown("---")
     tab_choice = st.radio("เมนูหลัก", ["📝 บันทึกภาระงาน", "📅 ประวัติงาน & ปฏิทิน", "📊 Dashboard", "⚙️ ออกรายงาน & จัดการข้อมูล"])
     st.markdown("---")
-    st.caption("v1.6 — Full Functional Complete")
+    st.caption("v1.7 — Timezone Fixed")
 
 data = fetch_all_data()
 staff_list = data.get("staff", [])
@@ -144,7 +151,8 @@ df = pd.DataFrame(data.get("logs", []))
 
 if not df.empty:
     df["Minutes"] = pd.to_numeric(df["Minutes"], errors="coerce").fillna(0)
-    df["Date"] = pd.to_datetime(df["Date"]).dt.date
+    # ฟังก์ชันแก้ปัญหาวันที่ 26 โผล่มาแทนวันที่ 27 (บังคับ Timezone ไทย)
+    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.tz_convert('Asia/Bangkok').dt.date
 
 # --- TAB 1: ENTRY ---
 if tab_choice == "📝 บันทึกภาระงาน":
@@ -202,7 +210,7 @@ elif tab_choice == "📅 ประวัติงาน & ปฏิทิน":
     st.subheader("🗑️ ลบรายการ")
     df_with_idx = df.copy()
     df_with_idx["idx"] = df_with_idx.index + 2
-    row_map = {f"แถว {r['idx']} | {r['Date']} | {r['Name']}": r['idx'] for _, r in df_with_idx.iterrows()}
+    row_map = {f"แถว {r['idx']} | {r['Date'].strftime('%d/%m/%Y')} | {r['Name']}": r['idx'] for _, r in df_with_idx.iterrows()}
     target = st.selectbox("เลือกรายการที่จะลบ", options=list(row_map.keys()))
     if st.button("❌ ยืนยันการลบ"):
         if requests.post(SCRIPT_URL, json={"action": "delete_log", "row_index": row_map[target]}).status_code in [200, 302]:
