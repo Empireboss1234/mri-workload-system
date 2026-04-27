@@ -7,20 +7,15 @@ import math
 import io
 import json
 from datetime import datetime, date, timedelta
-from docx import Document
-from docx.shared import Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # ── CONFIGURATION ─────────────────────────────────────────────────────────────
 
-# ⚠️ วาง Web app URL ของคุณตรงนี้
+# ⚠️ ตรวจสอบ SCRIPT_URL ให้ถูกต้อง
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzKjgLJ7yRHLkDpCZejbmWEDBQcvyd-YZmeS7WMMYBVkKkkyhckElmRVoE1NpHNenX7NA/exec"
 
-# FTE Standards (minutes)
 MONTHLY_FTE_MINUTES = 8_750
 ANNUAL_FTE_MINUTES  = 105_000
 
-# ── TASK LIST ─────────────────────────────────────────────────────────────────
 TASKS = {
     1:  "ควบคุมคุณภาพและจัดทำรายงานการควบคุมคุณภาพเครื่องมือทางรังสีวินิจฉัย รวมถึงติดตาม ควบคุม ประจำวัน สัปดาห์ เดือน ครึ่งปี ปี",
     2:  "ติดตาม ตรวจสอบ ความผิดปกติของเครื่องมือทางรังสีวินิจฉัยร่วมกับนักรังสีการแพทย์ และ วิศวกร",
@@ -48,26 +43,37 @@ THAI_MONTHS = {
     9: "กันยายน", 10: "ตุลาคม", 11: "พฤศจิกายน", 12: "ธันวาคม",
 }
 
-# ── PAGE CONFIG & STYLE ───────────────────────────────────────────────────────
+# ── PAGE CONFIG ───────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="Medical Physicist Workload", page_icon="⚛️", layout="wide")
 
+# CSS Styling (Match image_100bb0.png)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Sarabun', sans-serif; }
     [data-testid="stSidebar"] { background: linear-gradient(180deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
-    .section-header { background: linear-gradient(90deg, #0284c7, #0ea5e9); color: white; padding: 10px 18px; border-radius: 8px; margin: 16px 0; font-weight: 700; }
-    .fte-box { background: linear-gradient(135deg, #0f2027, #2c5364); color: #bae6fd; padding: 20px; border-radius: 12px; text-align: center; }
+    .section-header { 
+        background: #009ef7; 
+        color: white; 
+        padding: 12px 20px; 
+        border-radius: 10px; 
+        margin: 10px 0; 
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .fte-box { background: linear-gradient(135deg, #0f2027, #2c5364); color: #bae6fd; padding: 20px; border-radius: 12px; text-align: center; margin: 15px 0; }
     .fte-box span.big { font-size: 2.2rem; color: #38bdf8; font-weight: 700; }
-    .success-banner { background: #dcfce7; color: #15803d; border-left: 4px solid #16a34a; padding: 10px; border-radius: 6px; }
+    footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 
 def format_gas_time(time_val):
-    """แก้ปัญหาปี 1899: แปลงเวลาจาก GAS ให้เหลือแค่ HH:mm"""
+    """Clean GAS 1899 date bug and return HH:mm"""
     if not time_val or time_val == "-": return "-"
     time_str = str(time_val)
     if "T" in time_str:
@@ -78,174 +84,193 @@ def format_gas_time(time_val):
 def fetch_all_data():
     try:
         r = requests.get(SCRIPT_URL, timeout=15)
-        return r.json() if r.status_code == 200 else {"logs": [], "staff": [], "error": "HTTP Error"}
-    except Exception as e:
-        return {"logs": [], "staff": [], "error": str(e)}
+        return r.json() if r.status_code == 200 else {"logs": [], "staff": []}
+    except:
+        return {"logs": [], "staff": []}
 
 def invalidate_cache():
     fetch_all_data.clear()
 
 def generate_word_report(df_report, report_type, period_text):
-    """สร้างไฟล์ Word พร้อมแก้เวลาไทยและล้างปี 1899"""
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     doc = Document()
-    style = doc.styles['Normal']
-    style.font.name = 'Sarabun'
-    style.font.size = Pt(14)
-    
-    heading = doc.add_heading('รายงานสรุปภาระงาน (Workload Report)', 0)
-    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    title = doc.add_heading('รายงานสรุปภาระงาน (Workload Report)', 0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     doc.add_paragraph(f"หน่วยงาน: สาขารังสีวินิจฉัย โรงพยาบาลสงขลานครินทร์")
     doc.add_paragraph(f"ประเภทรายงาน: {report_type}")
-    doc.add_paragraph(f"ช่วงเวลาที่รายงาน: {period_text}")
+    doc.add_paragraph(f"ช่วงเวลา: {period_text}")
     
-    # ปรับเวลาไทย (+7 ชม.)
     thai_now = datetime.now() + timedelta(hours=7)
     doc.add_paragraph(f"วันที่พิมพ์รายงาน: {thai_now.strftime('%d/%m/%Y %H:%M')}")
     
     total_mins = df_report["Minutes"].sum()
     fte = round(total_mins / (ANNUAL_FTE_MINUTES if "ปี" in report_type else MONTHLY_FTE_MINUTES), 2)
-    doc.add_paragraph(f"สรุปผลรวม: ใช้เวลาปฏิบัติงานทั้งหมด {total_mins:,.0f} นาที (คิดเป็น {fte} FTE)")
+    doc.add_paragraph(f"สรุปผลรวม: {total_mins:,.0f} นาที (คิดเป็น {fte} FTE)")
     
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
-    hdr_cells = table.rows[0].cells
-    for i, txt in enumerate(['วันที่', 'เวลา', 'ผู้ปฏิบัติงาน', 'ชื่องาน', 'นาที']):
-        hdr_cells[i].text = txt
+    hdr = table.rows[0].cells
+    for i, txt in enumerate(['วันที่', 'เวลา', 'ผู้ปฏิบัติงาน', 'งาน', 'นาที']):
+        hdr[i].text = txt
 
     for _, row in df_report.sort_values(by="Date").iterrows():
-        row_cells = table.add_row().cells
-        row_cells[0].text = row['Date'].strftime('%d/%m/%Y') if pd.notnull(row['Date']) else '-'
+        cells = table.add_row().cells
+        cells[0].text = pd.to_datetime(row['Date']).strftime('%d/%m/%Y')
         s_time = format_gas_time(row.get('Start_Time', '-'))
         e_time = format_gas_time(row.get('End_Time', '-'))
-        row_cells[1].text = f"{s_time} - {e_time}" if s_time != "-" else "-"
-        row_cells[2].text = str(row['Name'])
-        row_cells[3].text = f"{row['Task_No']}. {str(row['Task_Name'])[:40]}..."
-        row_cells[4].text = f"{row['Minutes']:,}"
+        cells[1].text = f"{s_time}-{e_time}"
+        cells[2].text = str(row['Name'])
+        cells[3].text = str(row['Task_Name'])[:50]
+        cells[4].text = str(row['Minutes'])
         
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
 
-# ── MAIN APPLICATION ──────────────────────────────────────────────────────────
+# ── APP LOGIC ─────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("## ⚛️ Medical Physicist\n### Workload Manager")
     st.markdown("---")
-    tab_choice = st.radio("เมนูหลัก", ["📝 บันทึกภาระงาน", "📅 ประวัติงาน", "📊 Dashboard", "⚙️ ออกรายงาน & จัดการข้อมูล"])
+    tab_choice = st.radio("เมนูหลัก", ["📝 บันทึกภาระงาน", "📅 ประวัติงาน & ปฏิทิน", "📊 Dashboard", "⚙️ ออกรายงาน & จัดการข้อมูล"])
     st.markdown("---")
-    st.caption("v1.4 — Production Ready")
+    st.caption("v1.6 — Full Functional Complete")
 
 data = fetch_all_data()
 staff_list = data.get("staff", [])
-logs_raw = data.get("logs", [])
-df = pd.DataFrame(logs_raw)
+df = pd.DataFrame(data.get("logs", []))
 
 if not df.empty:
     df["Minutes"] = pd.to_numeric(df["Minutes"], errors="coerce").fillna(0)
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Date"] = pd.to_datetime(df["Date"]).dt.date
 
-# ── TAB: DATA ENTRY ───────────────────────────────────────────────────────────
-
+# --- TAB 1: ENTRY ---
 if tab_choice == "📝 บันทึกภาระงาน":
     st.markdown('<div class="section-header">📝 บันทึกภาระงานประจำวัน</div>', unsafe_allow_html=True)
-    if not staff_list: st.warning("กรุณาเพิ่มชื่อเจ้าหน้าที่ก่อน"); st.stop()
+    if not staff_list: st.warning("กรุณาเพิ่มชื่อเจ้าหน้าที่ในเมนู 'จัดการข้อมูล' ก่อน"); st.stop()
 
     with st.form("entry_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
-            entry_date = st.date_input("วันที่ปฏิบัติงาน", value=date.today())
-            entry_name = st.selectbox("ชื่อผู้ปฏิบัติงาน", options=staff_list)
-            entry_details = st.text_input("รายละเอียดเพิ่มเติม")
+            e_date = st.date_input("วันที่", value=date.today())
+            e_name = st.selectbox("ชื่อผู้ปฏิบัติงาน", options=staff_list)
+            e_desc = st.text_input("รายละเอียดเพิ่มเติม")
         with c2:
-            entry_task = st.selectbox("รายการงาน", options=TASK_LABELS)
+            e_task_label = st.selectbox("รายการงาน", options=TASK_LABELS)
             tc1, tc2 = st.columns(2)
             with tc1: s_time = st.time_input("เวลาเริ่ม", value=datetime.strptime("08:30", "%H:%M").time())
             with tc2: e_time = st.time_input("เวลาสิ้นสุด", value=datetime.strptime("09:00", "%H:%M").time())
         
         if st.form_submit_button("💾 บันทึกข้อมูล", use_container_width=True, type="primary"):
-            dt_s, dt_e = datetime.combine(entry_date, s_time), datetime.combine(entry_date, e_time)
+            dt_s, dt_e = datetime.combine(e_date, s_time), datetime.combine(e_date, e_time)
             if dt_e < dt_s: dt_e += timedelta(days=1)
             mins = int((dt_e - dt_s).total_seconds() / 60)
             
+            task_no = TASK_NO_FROM_LABEL[e_task_label]
             payload = {
                 "action": "append_log",
-                "data": [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(entry_date), entry_name, 
-                         TASK_NO_FROM_LABEL[entry_task], TASKS[TASK_NO_FROM_LABEL[entry_task]], 
-                         entry_details, mins, s_time.strftime("%H:%M"), e_time.strftime("%H:%M")]
+                "data": [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), str(e_date), e_name, 
+                         task_no, TASKS[task_no], e_desc, mins, s_time.strftime("%H:%M"), e_time.strftime("%H:%M")]
             }
             if requests.post(SCRIPT_URL, json=payload).status_code in [200, 302]:
-                st.success(f"บันทึกสำเร็จ! ใช้เวลา {mins} นาที"); invalidate_cache(); st.rerun()
+                st.success(f"บันทึกสำเร็จ! ({mins} นาที)"); invalidate_cache(); st.rerun()
 
-# ── TAB: HISTORY ──────────────────────────────────────────────────────────────
-
-elif tab_choice == "📅 ประวัติงาน":
+# --- TAB 2: HISTORY & CALENDAR ---
+elif tab_choice == "📅 ประวัติงาน & ปฏิทิน":
     st.markdown('<div class="section-header">📅 รายการภาระงานย้อนหลัง</div>', unsafe_allow_html=True)
-    if df.empty: st.info("ยังไม่มีข้อมูล"); st.stop()
-    
-    # แสดงตาราง
-    temp_df = df.copy()
-    temp_df["Time"] = temp_df.apply(lambda x: f"{format_gas_time(x.get('Start_Time','-'))} - {format_gas_time(x.get('End_Time','-'))}", axis=1)
-    view_df = temp_df[["Date", "Time", "Name", "Task_Name", "Minutes"]]
-    st.dataframe(view_df, use_container_width=True)
-
-# ── TAB: DASHBOARD ────────────────────────────────────────────────────────────
-
-elif tab_choice == "📊 Dashboard":
-    st.markdown('<div class="section-header">📊 วิเคราะห์ภาพรวมและ FTE</div>', unsafe_allow_html=True)
     if df.empty: st.info("ไม่มีข้อมูล"); st.stop()
     
-    m_year = st.selectbox("เลือกปี", sorted(df["Date"].dt.year.unique(), reverse=True))
-    m_month = st.selectbox("เลือกเดือน", list(range(1, 13)), format_func=lambda x: THAI_MONTHS[x])
+    # Table View
+    temp_df = df.copy()
+    temp_df["Time"] = temp_df.apply(lambda x: f"{format_gas_time(x.get('Start_Time','-'))} - {format_gas_time(x.get('End_Time','-'))}", axis=1)
+    view_df = temp_df[["Date", "Time", "Name", "Task_Name", "Minutes"]].sort_values("Date", ascending=False)
+    st.dataframe(view_df, use_container_width=True, hide_index=True)
+
+    # Calendar View
+    st.markdown("---")
+    st.subheader("📆 ปฏิทินภาระงาน")
+    try:
+        from streamlit_calendar import calendar
+        events = [{"title": f"{r['Name']}: {r['Minutes']}m", "start": str(r["Date"]), "end": str(r["Date"]), "color": "#009ef7"} for _, r in df.iterrows()]
+        calendar(events=events, options={"initialView": "dayGridMonth", "locale": "th"}, key="cal")
+    except: st.caption("ติดตั้ง streamlit-calendar เพื่อดูปฏิทิน")
+
+    # Delete Section
+    st.markdown("---")
+    st.subheader("🗑️ ลบรายการ")
+    df_with_idx = df.copy()
+    df_with_idx["idx"] = df_with_idx.index + 2
+    row_map = {f"แถว {r['idx']} | {r['Date']} | {r['Name']}": r['idx'] for _, r in df_with_idx.iterrows()}
+    target = st.selectbox("เลือกรายการที่จะลบ", options=list(row_map.keys()))
+    if st.button("❌ ยืนยันการลบ"):
+        if requests.post(SCRIPT_URL, json={"action": "delete_log", "row_index": row_map[target]}).status_code in [200, 302]:
+            st.success("ลบแล้ว"); invalidate_cache(); st.rerun()
+
+# --- TAB 3: DASHBOARD ---
+elif tab_choice == "📊 Dashboard":
+    st.markdown('<div class="section-header">📊 Dashboard & FTE Analysis</div>', unsafe_allow_html=True)
+    if df.empty: st.info("ยังไม่มีข้อมูล"); st.stop()
     
-    m_df = df[(df["Date"].dt.year == m_year) & (df["Date"].dt.month == m_month)]
+    yrs = sorted(pd.to_datetime(df["Date"]).dt.year.unique(), reverse=True)
+    sel_y = st.selectbox("เลือกปี", yrs)
+    sel_m = st.selectbox("เลือกเดือน", range(1, 13), format_func=lambda x: THAI_MONTHS[x])
+    
+    m_df = df[(pd.to_datetime(df["Date"]).dt.year == sel_y) & (pd.to_datetime(df["Date"]).dt.month == sel_m)]
     total = m_df["Minutes"].sum()
     fte = round(total/8750, 2)
     
-    st.markdown(f'<div class="fte-box">เดือน{THAI_MONTHS[m_month]} : <span class="big">{fte}</span> FTE ({total:,.0f} นาที)</div>', unsafe_allow_html=True)
-    
+    st.markdown(f'<div class="fte-box">สรุปเดือน {THAI_MONTHS[sel_m]} {sel_y}<br><span class="big">{fte}</span> FTE<br>({total:,.0f} นาที | {math.ceil(fte)} คน)</div>', unsafe_allow_html=True)
     if not m_df.empty:
-        st.plotly_chart(px.bar(m_df.groupby("Name")["Minutes"].sum().reset_index(), x="Name", y="Minutes", title="รายบุคคล"), use_container_width=True)
+        st.plotly_chart(px.bar(m_df.groupby("Name")["Minutes"].sum().reset_index(), x="Name", y="Minutes", color="Name", title="ภาระงานรายบุคคล"), use_container_width=True)
 
-# ── TAB: EXPORT & SETTINGS ────────────────────────────────────────────────────
-
+# --- TAB 4: EXPORT & SETTINGS ---
 elif tab_choice == "⚙️ ออกรายงาน & จัดการข้อมูล":
-    st.markdown('<div class="section-header">⚙️ จัดการข้อมูล & ส่งออกรายงาน Word</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">⚙️ จัดการข้อมูล & ออกรายงาน Word</div>', unsafe_allow_html=True)
     
-    # ส่วนเพิ่ม/ลบชื่อ (เหมือนเดิม)
-    st.subheader("👤 จัดการรายชื่อ")
-    new_n = st.text_input("ชื่อ-นามสกุลใหม่")
-    if st.button("เพิ่มชื่อ") and new_n:
-        if requests.post(SCRIPT_URL, json={"action": "add_staff", "name": new_n}).status_code in [200, 302]:
-            st.success("เพิ่มแล้ว"); invalidate_cache(); st.rerun()
+    # Staff Manage
+    st.subheader("👤 จัดการรายชื่อเจ้าหน้าที่")
+    c_s1, c_s2 = st.columns(2)
+    with c_s1:
+        new_n = st.text_input("เพิ่มชื่อใหม่")
+        if st.button("💾 เพิ่มชื่อ") and new_n:
+            requests.post(SCRIPT_URL, json={"action": "add_staff", "name": new_n})
+            invalidate_cache(); st.rerun()
+    with c_s2:
+        if staff_list:
+            del_n = st.selectbox("เลือกชื่อที่จะลบ", staff_list)
+            if st.button("🗑️ ลบรายชื่อ"):
+                requests.post(SCRIPT_URL, json={"action": "delete_staff", "name": del_n})
+                invalidate_cache(); st.rerun()
 
     st.markdown("---")
     
-    # ส่วนออกรายงาน Word
-    st.subheader("📥 ดาวน์โหลดรายงาน (.docx)")
-    rep_type = st.radio("ประเภท:", ["รายสัปดาห์/ระบุช่วงเวลา", "รายเดือน", "รายปี"], horizontal=True)
+    # Export Word
+    st.subheader("📥 ออกรายงาน Workload (Word .docx)")
+    etype = st.radio("เลือกช่วงเวลา", ["สัปดาห์/กำหนดเอง", "รายเดือน", "รายปี"], horizontal=True)
     
     if not df.empty:
-        d_export = pd.DataFrame()
-        title, period = "", ""
+        d_exp = pd.DataFrame()
+        title, p_str = "", ""
         
-        if "สัปดาห์" in rep_type:
+        if "สัปดาห์" in etype:
             sd = st.date_input("เริ่ม", value=date.today()-timedelta(7))
-            ed = st.date_input("สิ้นสุด", value=date.today())
-            d_export = df[(df['Date'].dt.date >= sd) & (df['Date'].dt.date <= ed)]
-            title, period = "รายงานรายสัปดาห์", f"{sd.strftime('%d/%m/%Y')} - {ed.strftime('%d/%m/%Y')}"
-        elif "เดือน" in rep_type:
-            ey = st.selectbox("ปี", sorted(df["Date"].dt.year.unique(), reverse=True), key="ey")
-            em = st.selectbox("เดือน", list(range(1,13)), format_func=lambda x: THAI_MONTHS[x], key="em")
-            d_export = df[(df['Date'].dt.year == ey) & (df['Date'].dt.month == em)]
-            title, period = "รายงานรายเดือน", f"{THAI_MONTHS[em]} {ey}"
+            ed = st.date_input("จบ", value=date.today())
+            d_exp = df[(df['Date'] >= sd) & (df['Date'] <= ed)]
+            title, p_str = "รายงานประจำสัปดาห์", f"{sd} ถึง {ed}"
+        elif "เดือน" in etype:
+            ey = st.selectbox("ปี", yrs, key="ey")
+            em = st.selectbox("เดือน", range(1,13), format_func=lambda x: THAI_MONTHS[x], key="em")
+            d_exp = df[(pd.to_datetime(df["Date"]).dt.year == ey) & (pd.to_datetime(df["Date"]).dt.month == em)]
+            title, p_str = "รายงานรายเดือน", f"{THAI_MONTHS[em]} {ey}"
         else:
-            ey2 = st.selectbox("ปี", sorted(df["Date"].dt.year.unique(), reverse=True), key="ey2")
-            d_export = df[df['Date'].dt.year == ey2]
-            title, period = "รายงานรายปี", f"พ.ศ. {ey2 + 543}"
+            ey2 = st.selectbox("ปี", yrs, key="ey2")
+            d_exp = df[pd.to_datetime(df["Date"]).dt.year == ey2]
+            title, p_str = "รายงานรายปี", f"พ.ศ. {ey2 + 543}"
 
-        if st.button("📄 สร้างไฟล์ Word"):
-            if d_export.empty: st.error("ไม่พบข้อมูลในช่วงที่เลือก")
+        if st.button("📄 สร้างไฟล์ Word Report"):
+            if d_exp.empty: st.error("ไม่พบข้อมูล")
             else:
-                word_file = generate_word_report(d_export, title, period)
-                st.download_button("📥 คลิกเพื่อดาวน์โหลดไฟล์ Word", word_file, f"Workload_{period}.docx")
+                f_bytes = generate_word_report(d_exp, title, p_str)
+                st.download_button("📥 ดาวน์โหลดไฟล์ Word", f_bytes, f"Workload_{sel_y}.docx")
