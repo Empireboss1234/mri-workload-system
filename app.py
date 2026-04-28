@@ -73,17 +73,19 @@ st.markdown("""
 # ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 
 def format_gas_time(time_val):
-    """แปลงเวลาที่ Google Sheets แอบปรับเป็น UTC ให้บวก 7 ชั่วโมงกลับมาเป็นเวลาไทยเสมอ"""
     if pd.isna(time_val) or not time_val or str(time_val).strip() == "-" or str(time_val).lower() == 'nan': 
         return "-"
     time_str = str(time_val)
-    try:
-        if "T" in time_str:
-            dt = pd.to_datetime(time_str, utc=True).tz_convert('Asia/Bangkok')
+    if "T" in time_str or "Z" in time_str:
+        try:
+            dt = pd.to_datetime(time_str)
+            if dt.tz is not None:
+                dt = dt.tz_convert('Asia/Bangkok')
+            else:
+                dt = dt + pd.Timedelta(hours=7)
             return dt.strftime("%H:%M")
-        return time_str[:5]
-    except:
-        return time_str[:5]
+        except: pass
+    return time_str[:5]
 
 @st.cache_data(ttl=60)
 def fetch_all_data():
@@ -132,7 +134,7 @@ def generate_word_report(df_report, report_type, period_text):
         e_time = format_gas_time(row.get('End_Time', '-'))
         cells[1].text = f"{s_time}-{e_time}"
         cells[2].text = str(row['Name'])
-        cells[3].text = str(row['Task_Name']) 
+        cells[3].text = str(row['Task_Name'])
         
         det = str(row.get('Details', ''))
         cells[4].text = det if det != 'nan' and det.strip() != '' else '-'
@@ -149,7 +151,7 @@ with st.sidebar:
     st.markdown("---")
     tab_choice = st.radio("เมนูหลัก", ["📝 บันทึกภาระงาน", "📅 ประวัติงาน & ปฏิทิน", "📊 Dashboard", "⚙️ ออกรายงาน & จัดการข้อมูล"])
     st.markdown("---")
-    st.caption("v1.13 — Fixed Timezone UI")
+    st.caption("v1.14 — Annual Dashboard View")
 
 data = fetch_all_data()
 staff_list = data.get("staff", [])
@@ -157,12 +159,11 @@ df = pd.DataFrame(data.get("logs", []))
 
 if not df.empty:
     df["Minutes"] = pd.to_numeric(df["Minutes"], errors="coerce").fillna(0)
-    
-    # ดึงวันที่กลับมาเป็นเวลาไทย เพื่อป้องกันวันที่ขยับไป 1 วัน
-    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.tz_convert('Asia/Bangkok').dt.date
-    
-    if "Details" not in df.columns:
-        df["Details"] = "-"
+    parsed_dates = pd.to_datetime(df["Date"], errors='coerce')
+    if parsed_dates.dt.tz is not None:
+        df["Date"] = parsed_dates.dt.tz_convert('Asia/Bangkok').dt.date
+    else:
+        df["Date"] = (parsed_dates + pd.Timedelta(hours=7)).dt.date
 
 # --- TAB 1: ENTRY ---
 if tab_choice == "📝 บันทึกภาระงาน":
@@ -231,18 +232,35 @@ elif tab_choice == "📊 Dashboard":
     st.markdown('<div class="section-header">📊 Dashboard & FTE Analysis</div>', unsafe_allow_html=True)
     if df.empty: st.info("ยังไม่มีข้อมูล"); st.stop()
     
+    # เพิ่ม Toggle สลับมุมมองรายเดือนและรายปี
+    view_type = st.radio("เลือกมุมมองการประเมินภาระงาน", ["📅 สรุปรายเดือน", "📆 สรุปรายปี"], horizontal=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
     yrs = sorted(pd.to_datetime(df["Date"]).dt.year.unique(), reverse=True)
-    sel_y = st.selectbox("เลือกปี", yrs)
-    sel_m = st.selectbox("เลือกเดือน", range(1, 13), format_func=lambda x: THAI_MONTHS[x])
     
-    m_df = df[(pd.to_datetime(df["Date"]).dt.year == sel_y) & (pd.to_datetime(df["Date"]).dt.month == sel_m)]
-    total = m_df["Minutes"].sum()
-    fte = round(total/8750, 2)
-    req_staff = math.ceil(fte) if fte > 0 else 0
+    if view_type == "📅 สรุปรายเดือน":
+        c1, c2 = st.columns(2)
+        with c1: sel_y = st.selectbox("เลือกปี", yrs)
+        with c2: sel_m = st.selectbox("เลือกเดือน", range(1, 13), format_func=lambda x: THAI_MONTHS[x])
+        
+        target_df = df[(pd.to_datetime(df["Date"]).dt.year == sel_y) & (pd.to_datetime(df["Date"]).dt.month == sel_m)]
+        total = target_df["Minutes"].sum()
+        fte = round(total / MONTHLY_FTE_MINUTES, 2)
+        req_staff = math.ceil(fte) if fte > 0 else 0
+        title_text = f"สรุปภาระงานเดือน {THAI_MONTHS[sel_m]} {sel_y}"
+        
+    else:
+        sel_y = st.selectbox("เลือกปี", yrs)
+        
+        target_df = df[pd.to_datetime(df["Date"]).dt.year == sel_y]
+        total = target_df["Minutes"].sum()
+        fte = round(total / ANNUAL_FTE_MINUTES, 2)
+        req_staff = math.ceil(fte) if fte > 0 else 0
+        title_text = f"สรุปภาระงานประจำปี {sel_y}"
     
     st.markdown(f'''
     <div class="fte-box">
-        สรุปภาระงานเดือน {THAI_MONTHS[sel_m]} {sel_y}<br>
+        {title_text}<br>
         <span class="big">{fte}</span> FTE <span style="font-size: 1rem;">({total:,.0f} นาที)</span><br>
         <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
             📌 อัตรากำลังนักฟิสิกส์การแพทย์ที่ต้องการ: <span class="med">{req_staff}</span> คน
@@ -250,8 +268,8 @@ elif tab_choice == "📊 Dashboard":
     </div>
     ''', unsafe_allow_html=True)
     
-    if not m_df.empty:
-        st.plotly_chart(px.bar(m_df.groupby("Name")["Minutes"].sum().reset_index(), x="Name", y="Minutes", color="Name", title="ภาระงานรายบุคคล (นาที)"), use_container_width=True)
+    if not target_df.empty:
+        st.plotly_chart(px.bar(target_df.groupby("Name")["Minutes"].sum().reset_index(), x="Name", y="Minutes", color="Name", title="สัดส่วนภาระงานรายบุคคล (นาที)"), use_container_width=True)
 
 # --- TAB 4: EXPORT & SETTINGS ---
 elif tab_choice == "⚙️ ออกรายงาน & จัดการข้อมูล":
