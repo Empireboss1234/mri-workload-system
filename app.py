@@ -14,22 +14,24 @@ SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzKjgLJ7yRHLkDpCZejbmWEDBQ
 MONTHLY_FTE_MINUTES = 8_750
 ANNUAL_FTE_MINUTES  = 105_000
 
-# รายการงาน (มีข้อ 16)
+# รายการงาน
 TASKS = {
-    1:  "ควบคุมคุณภาพและจัดทำรายงานการควบคุมคุณภาพเครื่องมือทางรังสีวินิจฉัย",
-    2:  "ติดตาม ตรวจสอบ ความผิดปกติของเครื่องมือทางรังสีวินิจฉัย",
-    3:  "วัด,ประเมินจัดทำรายงานปริมาณรังสีกระเจิง และ ปริมาณรังสีรั่วไหล",
-    4:  "จัดทำค่าปริมาณรังสีอ้างอิง และจัดทำโปรโตคอล",
-    5:  "ดำเนินการเกี่ยวกับการวัดปริมาณรังสีส่วนบุคคล",
-    6:  "ตรวจสอบคุณภาพอุปกรณ์กำบังรังสี",
-    7:  "คำนวณปริมาณรังสีในผู้ป่วยและผู้ป่วยตั้งครรภ์",
-    8:  "ตรวจสอบแรกรับ และประเมินประสิทธิภาพหลังการติดตั้ง ซ่อมแซม",
-    9:  "กำหนดรายละเอียดคุณลักษณะเฉพาะเพื่อการจัดซื้อเครื่องมือ",
+    1:  "ควบคุมคุณภาพและจัดทำรายงานการควบคุมคุณภาพเครื่องมือทางรังสีวินิจฉัย รวมถึงติดตาม ควบคุม ประจำวัน สัปดาห์ เดือน ครึ่งปี ปี",
+    2:  "ติดตาม ตรวจสอบ ความผิดปกติของเครื่องมือทางรังสีวินิจฉัยร่วมกับนักรังสีการแพทย์ และ วิศวกร",
+    3:  "วัดและประเมินปริมาณรังสีกระเจิง และ ปริมาณรังสีรั่วไหล รวมถึงจัดทำรายงาน",
+    4:  "จัดทำค่าปริมาณรังสีอ้างอิง (DRL) และจัดทำโปรโตคอลในการกำหนดปริมาณรังสีที่ผู้ป่วยได้รับ",
+    5:  "ดำเนินการเกี่ยวกับการวัดปริมาณรังสีส่วนบุคคล (OSL/TLD) บันทึกรายงาน และหาทางรับมือหากรังสีเกินมาตรฐาน",
+    6:  "ตรวจสอบคุณภาพอุปกรณ์กำบังรังสี เช่น เสื้อตะกั่ว thyroid shield",
+    7:  "คำนวณปริมาณรังสีในผู้ป่วยตั้งครรภ์ รวมถึงผู้ป่วยที่ได้รับปริมาณรังสีสูงเกินขีดจำกัด",
+    8:  "ตรวจสอบแรกรับ และประเมินประสิทธิภาพการใช้งานของเครื่องมือทางรังสีหลังการติดตั้ง ซ่อมแซม (Acceptance Test)",
+    9:  "จัดทำและเข้าร่วมในการกำหนดรายละเอียดคุณลักษณะเฉพาะ (TOR/Spec) เพื่อการจัดซื้อเครื่องมือ",
     10: "จัดทำแผนการป้องกันอันตรายทางรังสี แผนฉุกเฉิน และแผนอุบัติเหตุทางรังสี",
-    11: "ดำเนินการสอบเทียบมาตรฐานอุปกรณ์ที่ใช้ในการวัดปริมาณรังสี",
-    12: "จัดทำรายงานการขออนุญาตการมีไว้ในครอบครองและการใช้งานเครื่องกำเนิดรังสี",
-    13: "ตรวจสอบการได้รับรังสีกรณีเกิดเหตุใดๆ กับผู้ป่วยหลังการตรวจ",
-    14: "ประชุมหัวข้ออื่นๆที่เกี่ยวข้องกับทางรังสีวินิจฉัย"
+    11: "ให้คำแนะนำการป้องกันอันตรายจากรังสี รวมถึงแผนฉุกเฉินทางรังสี",
+    12: "ศึกษา ค้นคว้า วิเคราะห์ วิจัยทางฟิสิกส์การแพทย์",
+    13: "ดำเนินการสอบเทียบมาตรฐานอุปกรณ์ที่ใช้ในการวัดปริมาณรังสี (Calibration)",
+    14: "จัดทำรายงานการขออนุญาตการมีไว้ในครอบครองและการใช้งานเครื่องกำเนิดรังสี",
+    15: "ตรวจสอบการได้รับรังสีกรณีเกิดเหตุใดๆ กับผู้ป่วยหลังการตรวจ",
+    16: "ประชุมหัวข้ออื่นๆที่เกี่ยวข้องกับทางรังสีวินิจฉัย"
 }
 
 TASK_LABELS = [f"{k}. {v[:60]}…" if len(v) > 60 else f"{k}. {v}" for k, v in TASKS.items()]
@@ -71,11 +73,12 @@ st.markdown("""
 # ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 
 def format_gas_time(time_val):
+    """ระบบเวลาแบบเดิม ตัดข้อความทิ้งโดยไม่ดัดแปลง Timezone"""
     if not time_val or time_val == "-": return "-"
     time_str = str(time_val)
     if "T" in time_str:
         return time_str.split("T")[1][:5]
-    return time_str
+    return time_str[:5]
 
 @st.cache_data(ttl=60)
 def fetch_all_data():
@@ -110,11 +113,11 @@ def generate_word_report(df_report, report_type, period_text):
     staff_paragraph = doc.add_paragraph(f"📌 อัตรากำลังนักฟิสิกส์การแพทย์ที่เหมาะสมกับภาระงาน: {req_staff} คน")
     staff_paragraph.runs[0].bold = True
     
-    # ── เปลี่ยนจำนวนคอลัมน์เป็น 6 เพื่อเพิ่มคอลัมน์ "รายละเอียด" ──
+    # ตารางแบบ 6 คอลัมน์ (รวม Details)
     table = doc.add_table(rows=1, cols=6)
     table.style = 'Table Grid'
     hdr = table.rows[0].cells
-    headers = ['วันที่', 'เวลา', 'ผู้ปฏิบัติงาน', 'งาน', 'รายละเอียด', 'นาที']
+    headers = ['วันที่', 'เวลา', 'ผู้ปฏิบัติงาน', 'ชื่องาน', 'รายละเอียด', 'นาที']
     for i, txt in enumerate(headers):
         hdr[i].text = txt
 
@@ -125,12 +128,10 @@ def generate_word_report(df_report, report_type, period_text):
         e_time = format_gas_time(row.get('End_Time', '-'))
         cells[1].text = f"{s_time}-{e_time}"
         cells[2].text = str(row['Name'])
-        cells[3].text = str(row['Task_Name']) # ไม่ได้ตัดคำแล้ว เพื่อให้ตรงกับที่คุณแจ้งว่าจะย่อเอง
+        cells[3].text = str(row['Task_Name'])
         
-        # จัดการค่าว่างในช่องรายละเอียด
         det = str(row.get('Details', ''))
         cells[4].text = det if det != 'nan' and det.strip() != '' else '-'
-        
         cells[5].text = str(row['Minutes'])
         
     bio = io.BytesIO()
@@ -144,7 +145,7 @@ with st.sidebar:
     st.markdown("---")
     tab_choice = st.radio("เมนูหลัก", ["📝 บันทึกภาระงาน", "📅 ประวัติงาน & ปฏิทิน", "📊 Dashboard", "⚙️ ออกรายงาน & จัดการข้อมูล"])
     st.markdown("---")
-    st.caption("v1.10 — Add Details Column")
+    st.caption("v1.12 — Original Time Fixed")
 
 data = fetch_all_data()
 staff_list = data.get("staff", [])
@@ -152,7 +153,10 @@ df = pd.DataFrame(data.get("logs", []))
 
 if not df.empty:
     df["Minutes"] = pd.to_numeric(df["Minutes"], errors="coerce").fillna(0)
+    # วันที่แบบเดิม ไม่แปลง timezone ป้องกันวันที่เลื่อน
     df["Date"] = pd.to_datetime(df["Date"]).dt.date
+    if "Details" not in df.columns:
+        df["Details"] = "-"
 
 # --- TAB 1: ENTRY ---
 if tab_choice == "📝 บันทึกภาระงาน":
@@ -164,7 +168,7 @@ if tab_choice == "📝 บันทึกภาระงาน":
         with c1:
             e_date = st.date_input("วันที่", value=date.today())
             e_name = st.selectbox("ชื่อผู้ปฏิบัติงาน", options=staff_list)
-            e_desc = st.text_input("รายละเอียดเพิ่มเติม")
+            e_desc = st.text_input("รายละเอียดเพิ่มเติม (Details)")
         with c2:
             e_task_label = st.selectbox("รายการงาน", options=TASK_LABELS)
             tc1, tc2 = st.columns(2)
@@ -193,11 +197,8 @@ elif tab_choice == "📅 ประวัติงาน & ปฏิทิน":
     temp_df = df.copy()
     temp_df["Time"] = temp_df.apply(lambda x: f"{format_gas_time(x.get('Start_Time','-'))} - {format_gas_time(x.get('End_Time','-'))}", axis=1)
     
-    # ── ดึงคอลัมน์ Details มาโชว์ในตารางด้วย ──
     view_df = temp_df[["Date", "Time", "Name", "Task_Name", "Details", "Minutes"]].sort_values("Date", ascending=False)
-    
-    # แทนที่ค่า NaN เป็น "-" เพื่อความสวยงามในตาราง
-    view_df["Details"] = view_df["Details"].fillna("-").replace("", "-")
+    view_df["Details"] = view_df["Details"].fillna("-").replace("nan", "-").replace("", "-")
     
     st.dataframe(view_df, use_container_width=True, hide_index=True)
 
