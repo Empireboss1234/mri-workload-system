@@ -73,12 +73,17 @@ st.markdown("""
 # ── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 
 def format_gas_time(time_val):
-    """ระบบเวลาแบบเดิม ตัดข้อความทิ้งโดยไม่ดัดแปลง Timezone"""
-    if not time_val or time_val == "-": return "-"
+    """แปลงเวลาที่ Google Sheets แอบปรับเป็น UTC ให้บวก 7 ชั่วโมงกลับมาเป็นเวลาไทยเสมอ"""
+    if pd.isna(time_val) or not time_val or str(time_val).strip() == "-" or str(time_val).lower() == 'nan': 
+        return "-"
     time_str = str(time_val)
-    if "T" in time_str:
-        return time_str.split("T")[1][:5]
-    return time_str[:5]
+    try:
+        if "T" in time_str:
+            dt = pd.to_datetime(time_str, utc=True).tz_convert('Asia/Bangkok')
+            return dt.strftime("%H:%M")
+        return time_str[:5]
+    except:
+        return time_str[:5]
 
 @st.cache_data(ttl=60)
 def fetch_all_data():
@@ -113,7 +118,6 @@ def generate_word_report(df_report, report_type, period_text):
     staff_paragraph = doc.add_paragraph(f"📌 อัตรากำลังนักฟิสิกส์การแพทย์ที่เหมาะสมกับภาระงาน: {req_staff} คน")
     staff_paragraph.runs[0].bold = True
     
-    # ตารางแบบ 6 คอลัมน์ (รวม Details)
     table = doc.add_table(rows=1, cols=6)
     table.style = 'Table Grid'
     hdr = table.rows[0].cells
@@ -128,7 +132,7 @@ def generate_word_report(df_report, report_type, period_text):
         e_time = format_gas_time(row.get('End_Time', '-'))
         cells[1].text = f"{s_time}-{e_time}"
         cells[2].text = str(row['Name'])
-        cells[3].text = str(row['Task_Name'])
+        cells[3].text = str(row['Task_Name']) 
         
         det = str(row.get('Details', ''))
         cells[4].text = det if det != 'nan' and det.strip() != '' else '-'
@@ -145,7 +149,7 @@ with st.sidebar:
     st.markdown("---")
     tab_choice = st.radio("เมนูหลัก", ["📝 บันทึกภาระงาน", "📅 ประวัติงาน & ปฏิทิน", "📊 Dashboard", "⚙️ ออกรายงาน & จัดการข้อมูล"])
     st.markdown("---")
-    st.caption("v1.12 — Original Time Fixed")
+    st.caption("v1.13 — Fixed Timezone UI")
 
 data = fetch_all_data()
 staff_list = data.get("staff", [])
@@ -153,8 +157,10 @@ df = pd.DataFrame(data.get("logs", []))
 
 if not df.empty:
     df["Minutes"] = pd.to_numeric(df["Minutes"], errors="coerce").fillna(0)
-    # วันที่แบบเดิม ไม่แปลง timezone ป้องกันวันที่เลื่อน
-    df["Date"] = pd.to_datetime(df["Date"]).dt.date
+    
+    # ดึงวันที่กลับมาเป็นเวลาไทย เพื่อป้องกันวันที่ขยับไป 1 วัน
+    df["Date"] = pd.to_datetime(df["Date"], utc=True).dt.tz_convert('Asia/Bangkok').dt.date
+    
     if "Details" not in df.columns:
         df["Details"] = "-"
 
@@ -197,7 +203,7 @@ elif tab_choice == "📅 ประวัติงาน & ปฏิทิน":
     temp_df = df.copy()
     temp_df["Time"] = temp_df.apply(lambda x: f"{format_gas_time(x.get('Start_Time','-'))} - {format_gas_time(x.get('End_Time','-'))}", axis=1)
     
-    view_df = temp_df[["Date", "Time", "Name", "Task_Name", "Details", "Minutes"]].sort_values("Date", ascending=False)
+    view_df = temp_df[["Date", "Time", "Name", "Task_Name", "Details", "Minutes"]].sort_values(["Date", "Time"], ascending=[False, False])
     view_df["Details"] = view_df["Details"].fillna("-").replace("nan", "-").replace("", "-")
     
     st.dataframe(view_df, use_container_width=True, hide_index=True)
